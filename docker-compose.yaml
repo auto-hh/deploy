@@ -1,0 +1,89 @@
+services:
+  # =================== INFRASTRUCTURE ===================
+  postgres:
+    image: "postgres:16-alpine"
+    container_name: "auto-hh-postgres"
+    hostname: "postgres"
+    shm_size: 128mb
+    expose:
+      - "5432"
+    volumes:
+      - ./data/postgres/:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: "unless-stopped"
+
+  redis:
+    image: redis:7-alpine
+    container_name: "auto-hh-redis"
+    hostname: "redis"
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: "unless-stopped"
+
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: "auto-hh-kafka"
+    hostname: "kafka"
+    env_file:
+      - "./config/kafka.env"
+    expose:
+      - "9092"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+    restart: "unless-stopped"
+
+  # =================== APPLICATIONS ===================
+  gateway:
+    image: "ghcr.io/auto-hh/gateway:latest"
+    container_name: "auto-hh-gateway"
+    hostname: "gateway"
+    ports:
+      - "443:443"
+    env_file:
+      - "./config/gateway.env"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: "unless-stopped"
+
+  backend:
+    container_name: "auto-hh-backend"
+    hostname: "backend"
+    env_file:
+      - "./config/backend.env"
+    expose:
+      - "8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: "unless-stopped"
+
+  frontend:
+    container_name: "auto-hh-frontend"
+    hostname: "frontend"
+    env_file:
+      - "./config/frontend.env"
+    restart: "unless-stopped"
+
+  llm:
+    container_name: "auto-hh-llm"
+    hostname: "llm"
+    env_file:
+      - "./config/llm.env"
+    restart: "unless-stopped"
