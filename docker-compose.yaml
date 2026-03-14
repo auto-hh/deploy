@@ -89,12 +89,15 @@ services:
       - 80
     restart: unless-stopped
 
-  # llm:
-  #   container_name: auto-hh-llm
-  #   hostname: llm
-  #   env_file:
-  #     - ./config/llm.env
-  #   depends_on:
-  #     kafka:
-  #       condition: service_healthy
-  #   restart: unless-stopped
+  llm:
+    image: ghcr.io/auto-hh/llm:latest
+    container_name: auto-hh-llm
+    hostname: llm
+    env_file:
+      - ./config/llm.env
+    volumes:
+      - ./data/faiss_index/:/app/faiss_index/
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
