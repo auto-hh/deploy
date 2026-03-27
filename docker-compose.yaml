@@ -1,81 +1,57 @@
 services:
-  # =================== INFRASTRUCTURE ===================
   postgres:
-    image: postgres:16.13-alpine
+    image: postgres:18.3-alpine3.23
     container_name: auto-hh-postgres
-    hostname: postgres
-    shm_size: 128mb
-    env_file:
-      - ./config/postgres.env
+    hostname: ${POSTGRES_HOST:-postgres}
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - POSTGRES_DB=${POSTGRES_DATABASE:-database}
+      - PGPORT=${POSTGRES_PORT:-5432}
     expose:
-      - 5432
+      - ${POSTGRES_PORT:-5432}
     volumes:
-      - ./data/postgres/:/var/lib/postgresql/data/
+      - ./data/postgres/:/var/lib/postgresql/
+    shm_size: 128mb
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    restart: unless-stopped
-
-  redis:
-    image: redis:7.4.8-alpine
-    container_name: auto-hh-redis
-    hostname: redis
-    env_file:
-      - ./config/redis.env
-    expose:
-      - 6379
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    restart: unless-stopped
-
-  kafka:
-    image: apache/kafka:3.9.0
-    container_name: auto-hh-kafka
-    hostname: kafka
-    env_file:
-      - ./config/kafka.env
-    expose:
-      - 9092
-    healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER:-user}", "-d", "${POSTGRES_DATABASE:-database}"]
       interval: 10s
-      timeout: 10s
-      retries: 15
-    restart: unless-stopped
-
-  # =================== APPLICATIONS ===================
-  gateway:
-    image: ghcr.io/auto-hh/gateway:latest
-    container_name: auto-hh-gateway
-    hostname: gateway
-    ports:
-      - 80:80
-    env_file:
-      - ./config/gateway.env
-    depends_on:
-      redis:
-        condition: service_healthy
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   backend:
-    image: ghcr.io/auto-hh/core:latest
+    image: ghcr.io/auto-hh/backend:latest
     container_name: auto-hh-backend
-    hostname: backend
-    env_file:
-      - ./config/backend.env
+    hostname: ${BACKEND_HOST:-backend}
+    environment:
+      - BACKEND_PORT=${BACKEND_PORT:-80}
+      - LOG_LEVEL=${LOG_LEVEL:-debug}
+      - SECRET_KEY=${SECRET_KEY:-secret_key}
+      - JWT_EXPIRATION_DURATION=${JWT_EXPIRATION_DURATION:-24}
+      - STATE_EXPIRATION_DURATION=${STATE_EXPIRATION_DURATION:-10}
+      - LLM_PATH=${LLM_PATH:-http://llm}
+      - POSTGRES_USER=${POSTGRES_USER:-user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DATABASE=${POSTGRES_DATABASE:-database}
+      - CLIENT_ID=${CLIENT_ID:-client_id}
+      - CLIENT_SECRET=${CLIENT_SECRET:-client_secret}
+      - APP_NAME=${APP_NAME:-app_name}
+      - APP_VERSION=${APP_VERSION:-app_version}
+      - DEV_CONTACT=${DEV_CONTACT:-dev_contact}
+      - REDIRECT_URI=${REDIRECT_URI:-https://api.localhost/auth/complete}
+      - SITE_URL=${SITE_URL:-https://localhost/}
     expose:
-      - 8080
+      - ${BACKEND_PORT:-80}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${BACKEND_PORT:-80}/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     depends_on:
       postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      kafka:
         condition: service_healthy
     restart: unless-stopped
 
@@ -83,21 +59,25 @@ services:
     image: ghcr.io/auto-hh/frontend:latest
     container_name: auto-hh-frontend
     hostname: frontend
-    env_file:
-      - ./config/frontend.env
-    expose:
-      - 80
-    restart: unless-stopped
-
-  llm:
-    image: ghcr.io/auto-hh/llm:latest
-    container_name: auto-hh-llm
-    hostname: llm
-    env_file:
-      - ./config/llm.env
-    volumes:
-      - ./data/faiss_index/:/app/faiss_index/
+    environment:
+      - BACKEND_HOST=${BACKEND_HOST:-backend}
+      - BACKEND_PORT=${BACKEND_PORT:-80}
+    ports:
+      - 80:80
+      - 443:443
     depends_on:
-      kafka:
+      backend:
         condition: service_healthy
     restart: unless-stopped
+
+  # llm:
+  #   image: ghcr.io/auto-hh/llm:latest
+  #   container_name: auto-hh-llm
+  #   hostname: llm
+  #   env_file:
+  #     - ./config/llm.env
+  #   volumes:
+  #     - ./data/faiss_index/:/app/faiss_index/
+  #   expose:
+  #     - 80
+  #   restart: unless-stopped
