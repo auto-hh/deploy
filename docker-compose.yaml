@@ -45,10 +45,7 @@ services:
 
 
   backend:
-    # image: ghcr.io/auto-hh/backend:latest
-    build:
-      context: ../backend/
-      dockerfile: ./Dockerfile
+    image: ghcr.io/auto-hh/backend:latest
     container_name: auto-hh-backend
     hostname: ${BACKEND_HOST:-backend}
     environment:
